@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { AudioDebugPlayer } from './AudioDebugPlayer';
 import { mobileLog } from './MobileDebugPanel';
-import { openaiService } from '@/services/openaiService';
+import { secureOpenaiService } from '@/services/secureOpenaiService';
 
 interface DetectedObject {
   id: string;
@@ -23,6 +23,8 @@ interface Props {
 }
 
 export const VideoImageAnalyzer: React.FC<Props> = ({ videoBlob, audioPhrases, audioBlob }) => {
+  console.log('🔄 VideoImageAnalyzer LOADED - videoBlob:', !!videoBlob, 'audioPhrases:', audioPhrases?.length || 0);
+  
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [extractedFrames, setExtractedFrames] = useState<string[]>([]);
   const [visualObjects, setVisualObjects] = useState<DetectedObject[]>([]);
@@ -114,8 +116,9 @@ export const VideoImageAnalyzer: React.FC<Props> = ({ videoBlob, audioPhrases, a
     }
   };
 
-  // Extraire des frames de la vidéo - OPTIMISÉ MOBILE
-  const extractVideoFrames = async (blob: Blob): Promise<string[]> => {
+  // SUPPRIMÉ: Ancienne fonction extractVideoFrames - remplacée par frameExtractionService
+  
+  /*
     return new Promise((resolve) => {
       console.log('📱 MOBILE - Début extraction frames, blob size:', blob.size, 'bytes');
       console.log('📱 MOBILE - Blob type:', blob.type);
@@ -326,7 +329,7 @@ export const VideoImageAnalyzer: React.FC<Props> = ({ videoBlob, audioPhrases, a
         URL.revokeObjectURL(blobUrl);
       });
     });
-  };
+  */
 
   // 📱 FALLBACK MOBILE: Extraction simple d'une frame
   const extractSingleFrameMobile = async (blob: Blob): Promise<string | null> => {
@@ -427,9 +430,13 @@ export const VideoImageAnalyzer: React.FC<Props> = ({ videoBlob, audioPhrases, a
       
       // Analyser la première frame (ou toutes si on veut être plus précis)
       const firstFrame = frames[0];
-      const openaiResults = await openaiService.analyzeVideoFrame(firstFrame);
+      console.log('🖼️ FRAME À ANALYSER - Taille:', firstFrame.length, 'caractères');
+      console.log('🖼️ FRAME - Début:', firstFrame.substring(0, 100));
       
-      console.log('✅ Résultats OpenAI Vision:', openaiResults);
+      const openaiResults = await secureOpenaiService.analyzeVideoFrame(firstFrame);
+      
+      console.log('✅ Résultats OpenAI Vision COMPLET:', openaiResults);
+      console.log('📊 NOMBRE objets détectés:', openaiResults.length);
       
       // Convertir au format DetectedObject attendu par ce composant
       const visualDetections: DetectedObject[] = openaiResults.map((item, index) => ({
@@ -651,6 +658,9 @@ Ne réponds QUE par du JSON valide.`;
 
   // Processus d'analyse complet
   const startAnalysis = async () => {
+    console.log('🔥🔥🔥 STARTANALYSIS APPELÉ - PAGE MOBILE 🔥🔥🔥');
+    alert('🔥 TEST: startAnalysis appelé !');
+    
     mobileLog.info('🚀 DÉMARRAGE ANALYSE COMPLÈTE');
     mobileLog.info('📹 Vidéo blob: ' + (videoBlob?.size || 0) + ' bytes');
     mobileLog.info('🎙️ Phrases audio', audioPhrases);
@@ -672,13 +682,66 @@ Ne réponds QUE par du JSON valide.`;
       return;
     }
 
+    console.log('🚀 DEBUG: Début du try block dans startAnalysis');
     setIsAnalyzing(true);
     setAnalysisStep('frames');
+    console.log('🚀 DEBUG: États mis à jour, début extraction');
 
     try {
-      // 1. Extraction des frames
-      const frames = await extractVideoFrames(videoBlob);
+      // 1. Extraction de frame - COPIÉ DE /debug-vision QUI FONCTIONNE
+      console.log('🎬 DÉMARRAGE EXTRACTION FRAME (méthode debug-vision)...');
+      console.log('📱 Vidéo blob taille:', videoBlob.size, 'bytes');
+      
+      // UPLOAD DIRECT VERS CLOUDINARY (copié de debug-vision)
+      const formData = new FormData();
+      formData.append('file', videoBlob);
+      formData.append('upload_preset', 'dodo-lens-videos');
+      formData.append('resource_type', 'video');
+      
+      console.log('☁️ Upload vers Cloudinary...');
+      const uploadResponse = await fetch(
+        'https://api.cloudinary.com/v1_1/djuufdbpt/video/upload',
+        {
+          method: 'POST',
+          body: formData
+        }
+      );
+      
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload Cloudinary failed: ${uploadResponse.status}`);
+      }
+      
+      const uploadResult = await uploadResponse.json();
+      console.log(`✅ Upload Cloudinary réussi: ${uploadResult.public_id}`);
+      
+      // Générer URL de frame
+      const frameUrl = `https://res.cloudinary.com/djuufdbpt/video/upload/so_0/w_640,c_fit,f_jpg/${uploadResult.public_id}.jpg`;
+      console.log(`📸 URL frame: ${frameUrl}`);
+      
+      // Télécharger frame
+      const frameResponse = await fetch(frameUrl);
+      if (!frameResponse.ok) {
+        throw new Error(`Frame download failed: ${frameResponse.status}`);
+      }
+      
+      const frameBlob = await frameResponse.blob();
+      const reader = new FileReader();
+      
+      const frameData = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(frameBlob);
+      });
+      
+      const frames = [frameData];
+      console.log('✅ Frame extraite, taille:', frameData.length, 'caractères');
       setExtractedFrames(frames);
+      
+      console.log('📸 FRAMES EXTRAITES:', frames.length);
+      if (frames.length > 0) {
+        console.log('🖼️ PREMIÈRE FRAME - Taille:', frames[0].length, 'caractères');
+        console.log('🖼️ PREMIÈRE FRAME - Type:', frames[0].substring(0, 30));
+      }
       
       if (frames.length === 0) {
         console.warn('⚠️ Aucune frame extraite - analyse visuelle limitée');
@@ -708,7 +771,10 @@ Ne réponds QUE par du JSON valide.`;
 
       setAnalysisStep('complete');
     } catch (error) {
-      console.error('Erreur analyse:', error);
+      console.error('❌ ERREUR ANALYSE COMPLÈTE:', error);
+      console.error('❌ STACK TRACE:', error.stack);
+      mobileLog.error('❌ Analyse échouée: ' + error.message);
+      setAnalysisStep('idle');
     } finally {
       setIsAnalyzing(false);
     }
@@ -728,6 +794,9 @@ Ne réponds QUE par du JSON valide.`;
       />
 
       <div className="bg-white rounded-lg border p-6">
+        <div className="bg-red-100 border border-red-400 p-2 mb-4 text-center text-red-800 font-bold">
+          🔥 TEST DEBUG: VideoImageAnalyzer V2 CHARGÉ! 🔥
+        </div>
         <h3 className="text-lg font-semibold mb-4">🧠 Analyse LLM Avancée : GPT Vision + Audio + Fusion Intelligente</h3>
         
         {/* Statut et contrôles */}

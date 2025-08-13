@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { mobileLog } from './MobileDebugPanel';
-import { openaiService } from '../services/openaiService';
+import { secureOpenaiService } from '../services/secureOpenaiService';
 
 interface Props {
   onRecordingComplete: (videoBlob: Blob, phrases: string[], audioBlob?: Blob) => void;
@@ -487,8 +487,7 @@ export const OneTapRecorder: React.FC<Props> = ({ onRecordingComplete }) => {
               });
               
               // Appeler Whisper API via service sécurisé
-              const aiService = new (await import('@/services/aiService')).AIService();
-              const transcription = await aiService.transcribeAudio(debugAudioBlob);
+              const transcription = await secureOpenaiService.transcribeAudio(debugAudioBlob);
               
               if (transcription) {
                 // Séparer les phrases par des points ou des silences
@@ -529,6 +528,8 @@ export const OneTapRecorder: React.FC<Props> = ({ onRecordingComplete }) => {
             audio: audioChunksRef.current.length + ' chunks', 
             phrases: finalPhrases.length
           });
+          
+          console.log('🚀 APPEL onRecordingComplete avec:', finalPhrases.length, 'phrases');
           
           // Créer un blob audio depuis les chunks audio pour le debug
           let debugAudioBlob: Blob | undefined;

@@ -70,11 +70,12 @@ export class SecureOpenAIService {
         },
         body: JSON.stringify({
           imageData: frameDataUrl,
-          prompt: `Tu es un expert en déménagement. Analyse cette image d'intérieur et identifie les objets visibles.
+          prompt: `Tu es un expert en déménagement. Analyse cette image d'intérieur et identifie TOUS les objets visibles.
 
-CONSIGNES IMPORTANTES:
-- Si l'image est trop simple (pixel blanc, vide), réponds avec au moins 1 objet d'exemple
-- Identifie les meubles, électroménager, décoration visibles
+CONSIGNES STRICTES:
+- Examine attentivement CHAQUE détail de l'image
+- Identifie TOUS les meubles, électroménager, décorations, objets visibles
+- Si l'image est vide ou noire, retourne un tableau vide []
 - Estime un volume réaliste en m³ pour chaque objet
 - Donne un niveau de confiance entre 0 et 1
 
@@ -82,16 +83,19 @@ FORMAT DE RÉPONSE OBLIGATOIRE (JSON strict):
 {
   "detectedObjects": [
     {
-      "name": "Table basse",
-      "category": "salon",
-      "volume": 0.3,
-      "confidence": 0.8,
-      "quantity": 1
+      "name": "Nom exact de l'objet",
+      "category": "catégorie appropriée",
+      "volume": 0.X,
+      "confidence": 0.X,
+      "quantity": X
     }
   ]
 }
 
-IMPORTANT: Réponds UNIQUEMENT avec du JSON valide, aucun autre texte.`
+IMPORTANT: 
+- Réponds UNIQUEMENT avec du JSON valide, aucun autre texte
+- PAS de fallback générique, analyse vraiment l'image
+- Si rien n'est visible, retourne {"detectedObjects": []}`
         })
       });
 
@@ -114,8 +118,14 @@ IMPORTANT: Réponds UNIQUEMENT avec du JSON valide, aucun autre texte.`
       // Le backend retourne { success: true, result: "...", usage: {...} }
       if (result.success && result.result) {
         try {
-          // Parser le JSON retourné par OpenAI
-          const parsed = JSON.parse(result.result);
+          // Nettoyer la réponse OpenAI (supprimer les ```json``` si présents)
+          let jsonContent = result.result.trim();
+          if (jsonContent.startsWith('```json')) {
+            jsonContent = jsonContent.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+          }
+          
+          // Parser le JSON nettoyé
+          const parsed = JSON.parse(jsonContent);
           const objects = parsed.detectedObjects || parsed.objects || [];
           return this.formatDetectedItems(objects, 'video');
         } catch (parseError) {
@@ -148,15 +158,18 @@ IMPORTANT: Réponds UNIQUEMENT avec du JSON valide, aucun autre texte.`
    */
   async transcribeAudio(audioBlob: Blob): Promise<string> {
     try {
-      console.log('🎙️ Transcription audio via backend sécurisé...', audioBlob.size, 'bytes');
+      console.log('🎙️ Transcription audio via route RAW...', audioBlob.size, 'bytes');
       
-      // Créer un FormData pour l'upload d'audio
-      const formData = new FormData();
-      formData.append('audioFile', audioBlob, 'audio.webm'); // Backend attend 'audioFile'
+      // NOUVELLE MÉTHODE RAW: Conversion Blob → ArrayBuffer pour bypass Multer
+      const audioArrayBuffer = await audioBlob.arrayBuffer();
+      console.log('🔄 Conversion ArrayBuffer:', audioArrayBuffer.byteLength, 'bytes');
       
-      const response = await fetch(`${this.backendUrl}/api/dodo-lens/analyze-audio`, {
+      const response = await fetch(`${this.backendUrl}/api/dodo-lens/analyze-audio-raw`, {
         method: 'POST',
-        body: formData // Pas de Content-Type, laisse le navigateur gérer multipart/form-data
+        headers: {
+          'Content-Type': 'audio/webm'
+        },
+        body: audioArrayBuffer // Envoi direct ArrayBuffer vers express.raw()
       });
 
       if (!response.ok) {

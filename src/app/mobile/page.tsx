@@ -23,8 +23,14 @@ export default function MobilePage() {
   const [showDebugPanel, setShowDebugPanel] = useState<boolean>(false);
 
   const handleRecordingComplete = (videoBlob: Blob, phrases: string[], audioBlob?: Blob) => {
+    console.log('📱 MOBILE PAGE - handleRecordingComplete appelé:', {
+      videoSize: videoBlob.size,
+      phrasesCount: phrases.length,
+      audioSize: audioBlob?.size || 0
+    });
     setRecordedData({ videoBlob, phrases, audioBlob: audioBlob || null });
     setStep('analyze');
+    console.log('📱 MOBILE PAGE - Step changé vers "analyze"');
   };
 
   const resetRecording = () => {

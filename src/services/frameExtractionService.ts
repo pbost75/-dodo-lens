@@ -49,16 +49,17 @@ export class FrameExtractionService {
     
     console.log('📱 Mobile détecté:', isMobile);
     console.log('☁️ Cloudinary disponible:', isCloudinaryAvailable);
+    console.log('🔧 DEBUG Cloudinary config:', {
+      cloudName: this.cloudinaryConfig?.cloudName || 'UNDEFINED',
+      uploadPreset: this.cloudinaryConfig?.uploadPreset || 'UNDEFINED'
+    });
 
-    // 2. Stratégie de sélection
-    if (isMobile && isCloudinaryAvailable) {
-      console.log('🚀 Stratégie: Cloudinary (mobile fiable)');
-      return await this.extractFrameCloudinary(videoBlob, startTime);
-    } else if (isCloudinaryAvailable && videoBlob.size > 50 * 1024 * 1024) { // > 50MB
-      console.log('🚀 Stratégie: Cloudinary (grosse vidéo)');
+    // 2. Stratégie de sélection - PRÉFÉRER CLOUDINARY
+    if (isCloudinaryAvailable) {
+      console.log('🚀 Stratégie: Cloudinary (recommandé)');
       return await this.extractFrameCloudinary(videoBlob, startTime);
     } else {
-      console.log('🚀 Stratégie: Native JS (fallback)');
+      console.log('🚀 Stratégie: Native JS (fallback si pas Cloudinary)');
       return await this.extractFrameNative(videoBlob, startTime);
     }
   }
@@ -90,14 +91,18 @@ export class FrameExtractionService {
       
       const uploadResult = await uploadResponse.json();
       console.log('✅ Vidéo uploadée:', uploadResult.public_id);
+      console.log('🔧 DEBUG Upload result complet:', uploadResult);
       
-      // 2. Générer URL de frame (milieu de la vidéo)
-      const frameUrl = `https://res.cloudinary.com/v1_1/${this.cloudinaryConfig!.cloudName}/video/upload/so_auto/w_640,h_360,c_fill,f_jpg/${uploadResult.public_id}.jpg`;
+      // 2. Générer URL de frame (début de la vidéo pour éviter erreurs de durée)
+      const frameUrl = `https://res.cloudinary.com/v1_1/${this.cloudinaryConfig!.cloudName}/video/upload/so_0/w_640,c_fit,f_jpg/${uploadResult.public_id}.jpg`;
+      console.log('🔧 DEBUG URL générée:', frameUrl);
       
       // 3. Télécharger et convertir en base64
       console.log('📸 Téléchargement frame depuis Cloudinary...');
+      console.log('📸 URL frame:', frameUrl);
       const frameResponse = await fetch(frameUrl);
       
+      console.log('📸 Response status:', frameResponse.status);
       if (!frameResponse.ok) {
         throw new Error(`Frame download failed: ${frameResponse.status}`);
       }
@@ -118,6 +123,8 @@ export class FrameExtractionService {
       
     } catch (error) {
       console.error('❌ Erreur Cloudinary:', error);
+      console.error('❌ Type erreur:', error.constructor.name);
+      console.error('❌ Message:', error.message);
       
       // Fallback vers méthode native
       console.log('🔄 Fallback vers extraction native...');

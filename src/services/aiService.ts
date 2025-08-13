@@ -260,3 +260,6 @@ export class AIService {
     return merged;
   }
 }
+
+// Exporter l'instance singleton
+export const aiService = new AIService();

@@ -33,17 +33,9 @@ export const ApiStatusChecker: React.FC = () => {
     console.log('Backend URL:', backendUrl);
     console.log('Backend présent:', backendPresent);
     
-    // Attendre un peu que le service s'initialise
-    let configured = secureOpenaiService.isReady();
-    console.log('Service ready (initial):', configured);
-    
-    if (!configured) {
-      // Attendre 3 secondes pour l'initialisation asynchrone du backend
-      console.log('⏰ Attente initialisation backend...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      configured = secureOpenaiService.isReady();
-      console.log('Service ready (après attente):', configured);
-    }
+    // Le service backend est toujours prêt si l'URL est configurée
+    const configured = backendPresent;
+    console.log('Service configured:', configured);
     
     setStatus({
       configured,
